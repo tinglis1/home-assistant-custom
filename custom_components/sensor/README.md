@@ -14,7 +14,7 @@
 ### Example config
 ```yaml
 sensor:
-  platform: weather_bom
+  platform: bom_weather_current
   # name: "optional name"
   zone_id: IDS60801
   wmo_id: 94675

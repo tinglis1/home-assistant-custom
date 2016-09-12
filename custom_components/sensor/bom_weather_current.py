@@ -4,11 +4,11 @@ Support for bom.gov.au current condition weather service.
 For more details about this platform, please refer to the documentation at
 https://home-assistant.io/components/sensor.bomweathercurrent
 """
-from datetime import timedelta
-import logging
 
+import logging
 import requests
 import voluptuous as vol
+import datetime
 
 from homeassistant.components.sensor import PLATFORM_SCHEMA
 from homeassistant.helpers.entity import Entity
@@ -21,12 +21,11 @@ from homeassistant.const import (
 _RESOURCE = 'http://www.bom.gov.au/fwo/{}/{}.{}.json'
 _LOGGER = logging.getLogger(__name__)
 
-
 CONF_ZONE_ID = 'zone_id'
 CONF_WMO_ID = 'wmo_id'
-# CONF_NAME = 'custom station name'
 
-MIN_TIME_BETWEEN_UPDATES = timedelta(seconds=900)
+MIN_TIME_BETWEEN_UPDATES = datetime.timedelta(seconds=60)
+LAST_UPDATE = 0
 
 
 # Sensor types are defined like: Name, units
@@ -83,7 +82,9 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
                             config.get(CONF_WMO_ID))
     sensors = []
     for variable in config[CONF_MONITORED_CONDITIONS]:
-        sensors.append(BOMCurrentSensor(rest, variable, config.get(CONF_NAME)))
+        sensors.append(BOMCurrentSensor(rest,
+                                          variable,
+                                          config.get(CONF_NAME)))
 
     try:
         rest.update()
@@ -104,7 +105,6 @@ class BOMCurrentSensor(Entity):
         self.rest = rest
         self._condition = condition
         self.stationname = stationname
-
 
     @property
     def name(self):
@@ -130,7 +130,7 @@ class BOMCurrentSensor(Entity):
         attr['Zone Id'] = self.rest.data['history_product']
         attr['Station Id'] = self.rest.data['wmo']
         attr['Station Name'] = self.rest.data['name']
-        attr['Update Time'] = self.rest.data['local_date_time_full']
+        attr['Last Update'] = datetime.datetime.strptime(str(self.rest.data['local_date_time_full']),'%Y%m%d%H%M%S')
         return attr
 
     @property
@@ -141,9 +141,7 @@ class BOMCurrentSensor(Entity):
     def update(self):
         """Update current conditions."""
         self.rest.update()
-
-# pylint: disable=too-few-public-methods
-
+        
 
 class BOMCurrentData(object):
     """Get data from BOM."""
@@ -154,6 +152,7 @@ class BOMCurrentData(object):
         self._zone_id = zone_id
         self._wmo_id = wmo_id
         self.data = None
+        self._lastupdate = LAST_UPDATE
 
     def _build_url(self):
         url = _RESOURCE.format(self._zone_id, self._zone_id, self._wmo_id)
@@ -163,9 +162,16 @@ class BOMCurrentData(object):
     @Throttle(MIN_TIME_BETWEEN_UPDATES)
     def update(self):
         """Get the latest data from BOM."""
+        
+        if (self._lastupdate != 0) and ((datetime.datetime.now() - self._lastupdate) < datetime.timedelta(minutes=35)):
+            _LOGGER.info("BOM was updated %s minutes ago, skipping update as < 35 minutes", str((datetime.datetime.now() - self._lastupdate)))
+            return self._lastupdate
+        
         try:
             result = requests.get(self._build_url(), timeout=10).json()
             self.data = result['observations']['data'][0]
+            self._lastupdate = datetime.datetime.strptime(str(self.data['local_date_time_full']),'%Y%m%d%H%M%S')
+            return self._lastupdate
         except ValueError as err:
             _LOGGER.error("Check BOM %s", err.args)
             self.data = None
