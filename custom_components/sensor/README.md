@@ -9,6 +9,8 @@
 - get the station id for your local BOM sation from BOM > State > Observations > Latest Observations > Choose the station > read the url
 - the url will look like "http://www.bom.gov.au/products/IDS60801/IDS60801.94675.shtml". This is for Adelaide.
 - The url is read as:    "http://www.bom.gov.au/products/[zone_id]/[zone_id].[wmo_id].shtml"
+- optional name for multiple bom weather stations
+- sensor will update every minute 35 minutes after last data timestamp. This allows for the 30min observation cycle and the approximate 5 minute update delay.
 
 
 ### Example config

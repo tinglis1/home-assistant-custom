@@ -2,7 +2,7 @@
 Support for bom.gov.au current condition weather service.
 
 For more details about this platform, please refer to the documentation at
-https://home-assistant.io/components/sensor.bomweathercurrent
+https://home-assistant.io/components/sensor.bom_weather_current
 """
 
 import logging
@@ -10,12 +10,13 @@ import requests
 import voluptuous as vol
 import datetime
 
+
 from homeassistant.components.sensor import PLATFORM_SCHEMA
 from homeassistant.helpers.entity import Entity
 import homeassistant.helpers.config_validation as cv
 from homeassistant.util import Throttle
 from homeassistant.const import (
-    CONF_MONITORED_CONDITIONS, CONF_API_KEY, TEMP_FAHRENHEIT, TEMP_CELSIUS,
+    CONF_MONITORED_CONDITIONS, TEMP_CELSIUS,
     STATE_UNKNOWN, CONF_NAME)
 
 _RESOURCE = 'http://www.bom.gov.au/fwo/{}/{}.{}.json'
@@ -77,19 +78,18 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
 
 def setup_platform(hass, config, add_devices, discovery_info=None):
     """Setup the BOM sensor."""
-    rest = BOMCurrentData(hass,
-                            config.get(CONF_ZONE_ID),
-                            config.get(CONF_WMO_ID))
+    rest = BOMCurrentData(hass, config.get(CONF_ZONE_ID),
+                          config.get(CONF_WMO_ID))
     sensors = []
     for variable in config[CONF_MONITORED_CONDITIONS]:
         sensors.append(BOMCurrentSensor(rest,
-                                          variable,
-                                          config.get(CONF_NAME)))
+                                        variable,
+                                        config.get(CONF_NAME)))
 
     try:
         rest.update()
     except ValueError as err:
-        _LOGGER.error("Received error from BOM_Current: %s", err)
+        _LOGGER.error("Received error from BOM_Current: {}".format(err))
         return False
 
     add_devices(sensors)
@@ -109,10 +109,11 @@ class BOMCurrentSensor(Entity):
     @property
     def name(self):
         """Return the name of the sensor."""
-        try:
-          return "BOM " + self.stationname + " " + SENSOR_TYPES[self._condition][0]
-        except:
-          return "BOM " + SENSOR_TYPES[self._condition][0]
+        if self.stationname is None:
+            return "BOM {}".format(SENSOR_TYPES[self._condition][0])
+        else:
+            return "BOM {} {}".format(self.stationname,
+                                      SENSOR_TYPES[self._condition][0])
 
     @property
     def state(self):
@@ -130,7 +131,9 @@ class BOMCurrentSensor(Entity):
         attr['Zone Id'] = self.rest.data['history_product']
         attr['Station Id'] = self.rest.data['wmo']
         attr['Station Name'] = self.rest.data['name']
-        attr['Last Update'] = datetime.datetime.strptime(str(self.rest.data['local_date_time_full']),'%Y%m%d%H%M%S')
+        attr['Last Update'] = datetime.datetime.strptime(str(
+                                self.rest.data['local_date_time_full']),
+                                '%Y%m%d%H%M%S')
         return attr
 
     @property
@@ -141,7 +144,7 @@ class BOMCurrentSensor(Entity):
     def update(self):
         """Update current conditions."""
         self.rest.update()
-        
+
 
 class BOMCurrentData(object):
     """Get data from BOM."""
@@ -156,23 +159,30 @@ class BOMCurrentData(object):
 
     def _build_url(self):
         url = _RESOURCE.format(self._zone_id, self._zone_id, self._wmo_id)
-        _LOGGER.info("BOM url %s", url)
+        _LOGGER.info("BOM url {}".format(url))
         return url
 
     @Throttle(MIN_TIME_BETWEEN_UPDATES)
     def update(self):
         """Get the latest data from BOM."""
-        
-        if (self._lastupdate != 0) and ((datetime.datetime.now() - self._lastupdate) < datetime.timedelta(minutes=35)):
-            _LOGGER.info("BOM was updated %s minutes ago, skipping update as < 35 minutes", str((datetime.datetime.now() - self._lastupdate)))
+
+        if ((self._lastupdate != 0)
+                and ((datetime.datetime.now() - self._lastupdate)) <
+                datetime.timedelta(minutes=35)):
+            _LOGGER.info(
+                        "BOM was updated {} minutes ago, skipping update as"
+                        " < 35 minutes".format((datetime.datetime.now()
+                                                - self._lastupdate)))
             return self._lastupdate
-        
+
         try:
             result = requests.get(self._build_url(), timeout=10).json()
             self.data = result['observations']['data'][0]
-            self._lastupdate = datetime.datetime.strptime(str(self.data['local_date_time_full']),'%Y%m%d%H%M%S')
+            self._lastupdate = datetime.datetime.strptime(
+                                    str(self.data['local_date_time_full']),
+                                    '%Y%m%d%H%M%S')
             return self._lastupdate
         except ValueError as err:
-            _LOGGER.error("Check BOM %s", err.args)
+            _LOGGER.error("Check BOM {}".format(err.args))
             self.data = None
             raise
