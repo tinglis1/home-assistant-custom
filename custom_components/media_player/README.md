@@ -5,6 +5,10 @@
 ## Anthem MRX
 
 - Tested with the Anthem MRX500 with a Global Cache iTach Serial to IP adapter.
+- MRXx10 and MRXx20 models will not work with this but it could be
+    modified to work with those models. I do not have a test receiver to develop it but
+    if you do get in touch with me on the Home Assistant forum and we might be able to
+    develop this code to support them.
 
 
 ### Example config
@@ -17,7 +21,7 @@ media_player:
   mrxzone: 1
   minvol: -60
   maxvol: -30
-  
+
 - platform: anthem_mrx
   name: anthem_zone2
   host: 192.168.2.200
@@ -26,4 +30,3 @@ media_player:
   minvol: -45
   maxvol: -25
 ```
-
