@@ -9,13 +9,13 @@ import socket
 import select
 import time
 import re
-
 import voluptuous as vol
 
-from homeassistant.helpers import template
-from homeassistant.components.media_player import ( 
-    SUPPORT_TURN_OFF, SUPPORT_VOLUME_MUTE, SUPPORT_VOLUME_SET, SUPPORT_SELECT_SOURCE,
-    SUPPORT_VOLUME_STEP, MediaPlayerDevice, PLATFORM_SCHEMA)
+
+from homeassistant.components.media_player import (
+    SUPPORT_TURN_OFF, SUPPORT_VOLUME_MUTE, SUPPORT_VOLUME_SET,
+    SUPPORT_SELECT_SOURCE, SUPPORT_VOLUME_STEP, MediaPlayerDevice,
+    PLATFORM_SCHEMA)
 from homeassistant.const import (
     CONF_HOST, CONF_NAME, STATE_OFF, STATE_ON, STATE_UNKNOWN, CONF_PORT)
 import homeassistant.helpers.config_validation as cv
@@ -25,7 +25,6 @@ _LOGGER = logging.getLogger(__name__)
 DEFAULT_NAME = 'Anthem MRX'
 DEFAULT_PORT = 4999
 DEFAULT_MRXZONE = 1
-CONF_PORT = "port"
 CONF_MRXZONE = "mrxzone"
 CONF_MINVOL = "minvol"
 CONF_MAXVOL = "maxvol"
@@ -36,37 +35,48 @@ CONF_BUFFER_SIZE = "buffer_size"
 DEFAULT_TIMEOUT = 10
 DEFAULT_BUFFER_SIZE = 1024
 CONF_PAYLOAD = "payload"
-
-# attributes
-ATTR_LASTUPDATETIME = 'LastUpdateTime'
-ATTR_LASTUPDATETIMESTR = 'LastUpdateTimeStr'
-ATTR_RESPONSE = 'RawResponse'
+# CONF_MRXMODEL = "mrxmodel"
 
 SUPPORT_ANTHEMMRX = SUPPORT_SELECT_SOURCE | SUPPORT_VOLUME_STEP | \
-    SUPPORT_VOLUME_SET | SUPPORT_VOLUME_MUTE | \
-    SUPPORT_TURN_OFF
+    SUPPORT_VOLUME_SET | SUPPORT_VOLUME_MUTE | SUPPORT_TURN_OFF
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_HOST): cv.string,
-    vol.Required(CONF_PORT, default=DEFAULT_PORT): cv.port,
+    # vol.Optional(CONF_MRXMODEL): cv.string,
+    vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
     vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
+    vol.Optional(CONF_MRXZONE, default=DEFAULT_MRXZONE): cv.positive_int,
+    vol.Optional(CONF_MINVOL, default=DEFAULT_MINVOL): vol.Coerce(float),
+    vol.Optional(CONF_MAXVOL, default=DEFAULT_MAXVOL): vol.Coerce(float),
+    vol.Optional(CONF_TIMEOUT, default=DEFAULT_TIMEOUT): cv.positive_int,
 })
+
 
 def setup_platform(hass, config, add_devices, discovery_info=None):
 
     add_devices([AnthemMrx(hass, config)])
     return True
 
+
 class AnthemMrx(MediaPlayerDevice):
 
     def __init__(self, hass, config):
 
-        MRX_SOURCE_NUM = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'c', 'd', 'e']
-        MRX_SOURCE_NAME = ['BDP', 'CD', 'TV', 'SAT', 'GAME', 'AUX', 'MEDIA', 'AM/FM', 'iPod', 'current main zone source', 'USB', 'Internet Radio']
-        # self._MRX_SOURCE_NUM = MRX_SOURCE_NUM
-        # self._MRX_SOURCE_NAME = MRX_SOURCE_NAME
-        
-        
+        DEFAULT_MRX_SOURCE = {
+            '1': 'BDP',
+            '2': 'CD',
+            '3': 'TV',
+            '4': 'SAT',
+            '5': 'GAME',
+            '6': 'AUX',
+            '7': 'MEDIA',
+            '8': 'AM/FM',
+            '9': 'iPod',
+            'c': 'current main zone source',
+            'd': 'USB',
+            'e': 'Internet Radio'
+        }
+
         self._name = config.get(CONF_NAME)
         self._muted = None
         self._volume = 0
@@ -74,8 +84,9 @@ class AnthemMrx(MediaPlayerDevice):
         self._response = None
         self._lastupdatetime = None
         self._selected_source = ''
-        self._source_name_to_number = dict(zip(MRX_SOURCE_NAME, MRX_SOURCE_NUM))
-        self._source_number_to_name = dict(zip(MRX_SOURCE_NUM, MRX_SOURCE_NAME))
+        self._source_name_to_number = {v: k for k,
+                                       v in DEFAULT_MRX_SOURCE.items()}
+        self._source_number_to_name = DEFAULT_MRX_SOURCE
         self._config = {
             CONF_NAME: config.get(CONF_NAME),
             CONF_HOST: config[CONF_HOST],
@@ -90,45 +101,52 @@ class AnthemMrx(MediaPlayerDevice):
         self.update()
 
     def update(self):
-        CONF_PAYLOAD = "P" + str(self._config[CONF_MRXZONE]) + "?\r\n"
-        response = self.send_command(CONF_PAYLOAD)    
+        CONF_PAYLOAD = "P{}?;".format(self._config[CONF_MRXZONE])
+        response = self.send_command(CONF_PAYLOAD)
         self._response = response
         # self._state = response
-        
-        
+
         try:
             # check for the power off default messages for zone 1 and zone 2
-            if bool(re.search("Main.Off",response)) and self._config[CONF_MRXZONE] == 1:
-              self._state = STATE_OFF
-              return
-            if bool(re.search("Zone2.Off",response)) and self._config[CONF_MRXZONE] == 2:
-              self._state = STATE_OFF
-              return
+            if bool(re.search("Main.Off", response))\
+                    and self._config[CONF_MRXZONE] == 1:
+                self._state = STATE_OFF
+                return
+            if bool(re.search("Zone2.Off", response))\
+                    and self._config[CONF_MRXZONE] == 2:
+                self._state = STATE_OFF
+                return
 
             # regex the response
             responseObj = re.match(r'P(.)S(.)V(.*)M(.)D(.)', response)
-            #check if the correct zone has been returned
+
+            # check if the correct zone has been returned
             if int(responseObj.group(1)) != self._config[CONF_MRXZONE]:
-              return
-            
-            self._volume = max(min((int(responseObj.group(3)) + (0 - self._config[CONF_MINVOL])) / (self._config[CONF_MAXVOL] - self._config[CONF_MINVOL]),1),0)
-            
+                return
+
+            self._volume = max(min((int(responseObj.group(3))
+                                    + (0 - self._config[CONF_MINVOL]))
+                               / (self._config[CONF_MAXVOL]
+                               - self._config[CONF_MINVOL]), 1), 0)
+
             # check if it is muted
             if int(responseObj.group(4)) == 0:
-              self._muted = False
+                self._muted = False
             else:
-              self._muted = True
-            
-            self._selected_source = self._source_number_to_name.get(responseObj.group(2))
-            _LOGGER.info("SourceNum: " + responseObj.group(2) + " SourceName: " + self._selected_source)
-           
-            # if the try is pass then make the state on
+                self._muted = True
+
+            self._selected_source = self._source_number_to_name.get(
+                                            responseObj.group(2))
+            _LOGGER.info("SourceNum: {} SourceName: {}".format(
+                                responseObj.group(2), self._selected_source))
+
+            # if the try is passed then make the state on
             self._state = STATE_ON
         except (socket.timeout, TimeoutError, OSError):
             self._state = STATE_OFF
-         
+
     def send_command(self, payload):
-        _LOGGER.info("Payload: " + payload)
+        _LOGGER.info("Payload: {}".format(payload))
         """Send a command to the AnthemMRX and return the response"""
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.settimeout(self._config[CONF_TIMEOUT])
@@ -137,42 +155,36 @@ class AnthemMrx(MediaPlayerDevice):
                     (self._config[CONF_HOST], self._config[CONF_PORT]))
             except socket.error as err:
                 _LOGGER.error(
-                    "Unable to connect to %s on port %s: %s",
-                    self._config[CONF_HOST], self._config[CONF_PORT], err)
+                    "Unable to connect to {} on port {}: {}".format(
+                                    self._config[CONF_HOST],
+                                    self._config[CONF_PORT],
+                                    err))
                 return
 
             try:
                 sock.send(payload.encode())
             except socket.error as err:
                 _LOGGER.error(
-                    "Unable to send payload %r to %s on port %s: %s",
-                    payload, self._config[CONF_HOST],
-                    self._config[CONF_PORT], err)
+                    "Unable to send payload {} to {} on port {}: {}".format(
+                                    payload,
+                                    self._config[CONF_HOST],
+                                    self._config[CONF_PORT],
+                                    err))
                 return
 
             readable, _, _ = select.select(
                 [sock], [], [], self._config[CONF_TIMEOUT])
             if not readable:
                 _LOGGER.warning(
-                    "Timeout (%s second(s)) waiting for a response after "
-                    "sending %r to %s on port %s.",
-                    self._config[CONF_TIMEOUT], payload,
-                    self._config[CONF_HOST], self._config[CONF_PORT])
+                    "Timeout ({} second(s)) waiting for a response after "
+                    "sending {} to {} on port {}.".format(
+                        self._config[CONF_TIMEOUT], payload,
+                        self._config[CONF_HOST], self._config[CONF_PORT]))
                 return
             self._lastupdatetime = time.time()
             value = sock.recv(self._config[CONF_BUFFER_SIZE]).decode()
-            _LOGGER.info("Response: " + value)
+            _LOGGER.info("Response: {}".format(value))
         return value
-            
-    # @property
-    # def state_attributes(self):
-        # """ returns the atrributes of the sensor """
-        # return {
-            # ATTR_LASTUPDATETIME : self._lastupdatetime,
-            # ATTR_LASTUPDATETIMESTR : template.timestamp_local(float(self._lastupdatetime)),
-            # ATTR_RESPONSE: self._response,
-        # }          
-
 
     @property
     def source(self):
@@ -183,15 +195,16 @@ class AnthemMrx(MediaPlayerDevice):
     def source_list(self):
         """List of available input sources."""
         return list(self._source_name_to_number.keys())
-        # return list(self._MRX_SOURCE_NUM)
 
     def select_source(self, source):
         """Select input source."""
-        _LOGGER.info("Select Source: " + self._source_name_to_number.get(source))
-        CONF_PAYLOAD = "P" + str(self._config[CONF_MRXZONE]) + "S" + self._source_name_to_number.get(source) + "\n"
-        # CONF_PAYLOAD = "P" + str(self._config[CONF_MRXZONE]) + "S" + source + "\n"
+        _LOGGER.info("Select Source: {}".format(
+                        self._source_name_to_number.get(source)))
+        CONF_PAYLOAD = "P{}S{};".format(self._config[CONF_MRXZONE],
+                                        self._source_name_to_number
+                                        .get(source))
         self.send_command(CONF_PAYLOAD)
-        
+
     @property
     def name(self):
         """Return the name of the device."""
@@ -219,33 +232,39 @@ class AnthemMrx(MediaPlayerDevice):
 
     def turn_off(self):
         """Turn off media player."""
-        CONF_PAYLOAD = "P" + str(self._config[CONF_MRXZONE]) + "P0\n"
+        mrxcmd = "P0"
+        CONF_PAYLOAD = "P{}{};".format(self._config[CONF_MRXZONE], mrxcmd)
         self.send_command(CONF_PAYLOAD)
-        
+
     def turn_on(self):
         """Turn off media player."""
-        CONF_PAYLOAD = "P" + str(self._config[CONF_MRXZONE]) + "P1\n"
-        self.send_command(CONF_PAYLOAD)
+        mrxcmd = "P1"
+        CONF_PAYLOAD = "P{}{};".format(self._config[CONF_MRXZONE], mrxcmd)
         self.send_command(CONF_PAYLOAD)
 
     def volume_up(self):
         """Volume up the media player."""
-        CONF_PAYLOAD = "P" + str(self._config[CONF_MRXZONE]) + "VU\n"
-        self.send_command(CONF_PAYLOAD) 
-
+        mrxcmd = "VU"
+        CONF_PAYLOAD = "P{}{};".format(self._config[CONF_MRXZONE], mrxcmd)
+        self.send_command(CONF_PAYLOAD)
 
     def volume_down(self):
         """Volume down media player."""
-        CONF_PAYLOAD = "P" + str(self._config[CONF_MRXZONE]) + "VD\n"
-        self.send_command(CONF_PAYLOAD) 
+        mrxcmd = "VD"
+        CONF_PAYLOAD = "P{}{};".format(self._config[CONF_MRXZONE], mrxcmd)
+        self.send_command(CONF_PAYLOAD)
 
     def mute_volume(self, mute):
         """Send mute command."""
-        CONF_PAYLOAD = "P" + str(self._config[CONF_MRXZONE]) + "MT\n"
-        self.send_command(CONF_PAYLOAD) 
+        mrxcmd = "MT"
+        CONF_PAYLOAD = "P{}{};".format(self._config[CONF_MRXZONE], mrxcmd)
+        self.send_command(CONF_PAYLOAD)
 
     def set_volume_level(self, volume):
         """Set volume level, range 0..1."""
-        
-        CONF_PAYLOAD = "P" + str(self._config[CONF_MRXZONE]) + "V-" + str(-1 * int(((self._config[CONF_MAXVOL] - self._config[CONF_MINVOL]) * volume) - (0 - self._config[CONF_MINVOL]))) + "\n"
-        self.send_command(CONF_PAYLOAD) 
+        mrxvol = int(((self._config[CONF_MAXVOL]
+                       - self._config[CONF_MINVOL])
+                     * volume) - (0 - self._config[CONF_MINVOL]))
+
+        CONF_PAYLOAD = "P{}V{};".format(self._config[CONF_MRXZONE], mrxvol)
+        self.send_command(CONF_PAYLOAD)
