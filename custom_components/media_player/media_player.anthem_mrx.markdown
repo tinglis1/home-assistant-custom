@@ -7,7 +7,7 @@ sidebar: true
 comments: false
 sharing: true
 footer: true
-logo: anthem-logo.png
+logo: anthemav.png
 ha_category: Media Player
 featured: false
 ha_release: 0.19
