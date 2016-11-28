@@ -35,12 +35,12 @@ var hikvisionFront   = new ipcamera.hikvision(optionsFront);
 console.log(getDateTime() + ' Started')
 
 // Set initial state to no motion
-setState('hik_event_gate_motion', 'off');
-setState('hik_event_gate_line', 'off');
+setState('hikvision_event_gate_motion', 'off');
+setState('hikvision_event_gate_line', 'off');
 
 
-setState('hik_event_front_motion', 'off');
-setState('hik_event_front_line', 'off');
+setState('hikvision_event_front_motion', 'off');
+setState('hikvision_event_front_line', 'off');
 
 
 // Monitor Camera Alarms
@@ -48,21 +48,20 @@ setState('hik_event_front_line', 'off');
 hikvisionGate.on('alarm', function(code,action,index) {
     if (code === 'VideoMotion'   && action === 'Start')  {
         console.log(getDateTime() + ' Gate Channel ' + index + ': Video Motion Detected')
-        setState('hik_event_gate_motion', 'on');
+        setState('hikvision_event_gate_motion', 'on');
     }
     if (code === 'VideoMotion'   && action === 'Stop')   {
         console.log(getDateTime() + ' Gate Channel ' + index + ': Video Motion Ended')
-        setState('hik_event_gate_motion', 'off');
+        setState('hikvision_event_gate_motion', 'off');
     }
     if (code === 'LineDetection' && action === 'Start')  {
         console.log(getDateTime() + ' Gate Channel ' + index + ': Line Cross Detected')
-        setState('hik_event_gate_line', 'on');
+        setState('hikvision_event_gate_line', 'on');
     }
     if (code === 'LineDetection' && action === 'Stop')   {
         console.log(getDateTime() + ' Gate Channel ' + index + ': Line Cross Ended')
-        setState('hik_event_gate_line', 'off');
+        setState('hikvision_event_gate_line', 'off');
     }
-
 });
 
 // code = event reported by camera
@@ -72,21 +71,20 @@ hikvisionGate.on('alarm', function(code,action,index) {
 hikvisionFront.on('alarm', function(code,action,index) {
     if (code === 'VideoMotion'   && action === 'Start')  {
         console.log(getDateTime() + ' Front Channel ' + index + ': Video Motion Detected')
-        setState('hik_event_front_motion', 'on');
+        setState('hikvision_event_front_motion', 'on');
     }
     if (code === 'VideoMotion'   && action === 'Stop')   {
         console.log(getDateTime() + ' Front Channel ' + index + ': Video Motion Ended')
-        setState('hik_event_front_motion', 'off');
+        setState('hikvision_event_front_motion', 'off');
     }
     if (code === 'LineDetection' && action === 'Start')  {
         console.log(getDateTime() + ' Front Channel ' + index + ': Line Cross Detected')
-        setState('hik_event_front_line', 'on');
+        setState('hikvision_event_front_line', 'on');
     }
     if (code === 'LineDetection' && action === 'Stop')   {
         console.log(getDateTime() + ' Front Channel ' + index + ': Line Cross Ended')
-        setState('hik_event_front_line', 'off');
+        setState('hikvision_event_front_line', 'off');
     }
-
 });
 
 
@@ -104,16 +102,9 @@ function getDateTime() {
     var day  = date.getDate();
     day = (day < 10 ? "0" : "") + day;
     return year + "-" + month + "-" + day + "T" + hour + ":" + min + ":" + sec;
-    // 2016-11-28T09:00:00
 }
 
-// takes 2 variables, item, which is the item name in openhab
-// and the state you intend to set
 function setState( item, newState ) {
-
-    // var username = ha_Options['username'];
-    // var password = ha_Options['password'];
-    // var auth = 'Basic ' + new Buffer(username + ':' + password).toString('base64');
 
     var headers = {
         'Content-Type': 'application/json',
@@ -124,7 +115,6 @@ function setState( item, newState ) {
       host: ha_Options['host'],
       port: ha_Options['port'],
       path: '/api/states/binary_sensor.' + item,
-      // http://192.168.2.106:8123/api/states/binary_sensor.hikvision_hik_event_front
       method: 'POST',
       headers: headers
     };
@@ -143,7 +133,6 @@ function setState( item, newState ) {
     });
 
     // write data to request body
-    // var data = '{"state": " '+ newState + '"}'
     var data = {
         'state': newState,
         'attributes':
